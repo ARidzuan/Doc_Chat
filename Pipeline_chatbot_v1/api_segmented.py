@@ -68,6 +68,7 @@ clarifier = Clarifier()
 
 # FastAPI app
 app = FastAPI(title="Chatbot with Segmented Collections")
+#Maybe some text here
 
 # Global state
 vectordb = None
