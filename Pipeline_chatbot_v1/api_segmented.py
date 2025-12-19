@@ -71,6 +71,7 @@ app = FastAPI(title="Chatbot with Segmented Collections")
 
 # Global state
 vectordb = None
+
 retriever = None
 segmented_retriever = None  # New: for segmented mode
 collections = None  # New: dict of collections
