@@ -1,0 +1,11 @@
+langchain
+langchain-community
+langchain-core
+langchainhub
+langchain-ollama
+bs4
+chromadb
+uvicorn
+fastapi
+ctransformers
+sentence-transformers

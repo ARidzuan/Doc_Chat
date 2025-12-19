@@ -1,0 +1,18 @@
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Environment and IDE
+.venv/
+.vscode/
+.claude/
+
+model/
+
+chroma_db_image1/
+chroma_db_segmented/
+
+Pipeline_chatbot_v1/chroma_db_image1/
+Pipeline_chatbot_v1/chroma_db_image/
+Pipeline_chatbot_v1/chroma_html_db/
+Pipeline_chatbot_v1/chroma_db_1/

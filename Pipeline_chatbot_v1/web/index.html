@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Chatbot SCANeR</title>
+  <style>
+    /* Page and container styling */
+     body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      background-color: #fbfbfb;
+      background-image: url('./scaner.png');
+      background-repeat: no-repeat;
+      background-size: cover;
+      background-attachment: fixed;
+      min-height: 100vh;
+      background-position: center;
+    }
+    .wrap { max-width: 860px; margin: 24px auto; background:#ffffff; border:1px solid #030405; border-radius:12px; padding:16px; box-shadow: 0 4px 18px rgba(0,0,0,.06); box-sizing: border-box; }
+    .msgs { height: 65vh; overflow:auto; padding: 8px 12px; }   /* scrolling area for messages */
+    .msg { margin: 10px 0; white-space: pre-wrap; }             /* keep line breaks */
+    .you .label { color:#0ea5e9; }                              /* label color for user */
+    .bot  .label { color:#111827; }                             /* label color for bot */
+    .label { font-weight:600; margin-right:6px; }
+    .input { display:flex; gap:10px; margin-top:12px; }
+    .input input { flex:1; padding:10px 12px; font-size:16px; border:1px solid #cbd5e1; border-radius:8px; }
+    .input button { padding:10px 14px; font-size:16px; border:none; background:#0ea5e9; color:white; border-radius:8px; cursor:pointer; }
+    .img-inline { max-width: 42%; max-height: 240px; vertical-align: middle; margin: 4px 6px; border:1px solid #e5e7eb; border-radius:8px; }
+    .sources { font-size: 12px; color:#6b7280; margin-top:4px; }
+    .gallery { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .gallery img { max-width: 260px; max-height: 200px; border:1px solid #e5e7eb; border-radius:8px; }
+    figure { margin:0; }
+    figcaption { font-size: 12px; color:#6b7280; margin-top:4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- messages container -->
+    <div id="msgs" class="msgs"></div>
+
+    <!-- input area -->
+    <div class="input">
+      <input id="q" type="text" placeholder="Ask your question…" />
+      <button id="send">Ask</button>
+    </div>
+  </div>
+
+  <script>
+    // API endpoint used for chat requests. Same origin assumed.
+    const API_URL = "/chat";
+
+    // When true, the client tells the server that the user answered a clarification
+    let clarifyMode = false;
+
+    // helper: create element with optional class and text
+    function el(tag, cls, txt) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (txt != null) e.textContent = txt;
+      return e;
+    }
+
+    // Add a simple text message to the chat (role: 'you' or 'bot')
+    function addText(role, text) {
+      const msgs = document.getElementById('msgs');
+      const row = el('div', 'msg ' + role);
+      const label = el('span', 'label', role === 'you' ? 'You:' : 'Bot:');
+      row.appendChild(label);
+      row.appendChild(el('span', '', text));
+      msgs.appendChild(row);
+      // scroll new message into view
+      row.scrollIntoView({behavior: 'smooth', block: 'end'});
+    }
+
+    // Add a bot answer that may contain inline image markers [[IMG1]], [[IMG2]], ...
+    // - answer: text that may include markers
+    // - images: array of { url, caption } objects from API (use absolute URLs)
+    // - sources: array of source objects to display below the message
+    function addInlineAnswer(answer, images, sources) {
+      const msgs = document.getElementById('msgs');
+      const row = el('div', 'msg bot');
+
+      // split the answer by image markers, keep markers as parts:
+      // example: "Here is a photo [[IMG1]] and another [[IMG2]]"
+      let usedMarkers = false;
+      const parts = answer.split(/(\[\[IMG\d+\]\])/g);
+      parts.forEach(part => {
+        const m = part.match(/^\[\[IMG(\d+)\]\]$/);
+        if (m) {
+          usedMarkers = true;
+          const i = parseInt(m[1], 10) - 1;
+          const img = images && images[i];
+          if (img && img.url) {
+            const im = new Image();
+            im.className = "img-inline";
+            im.src = img.url;                 // use absolute URL provided by API
+            im.loading = 'lazy';
+            // add small spacing and the image element inline
+            row.appendChild(el('span', '', ' '));
+            row.appendChild(im);
+            row.appendChild(el('span', '', ' '));
+          } else {
+            // fallback text if image missing
+            row.appendChild(el('span', '', `[image ${i+1} missing]`));
+          }
+        } else {
+          // plain text part (no marker)
+          row.appendChild(el('span', '', part));
+        }
+      });
+      msgs.appendChild(row);
+
+      // If there were no inline markers but images exist, show gallery below message.
+      if (!usedMarkers && images && images.length) {
+        const gal = el('div', 'gallery');
+        for (const img of images) {
+          if (!img || !img.url) continue;
+          const fig = document.createElement('figure');
+          const im = new Image();
+          im.src = img.url;                    // absolute URL
+          im.loading = 'lazy';
+          fig.appendChild(im);
+          if (img.caption) {
+            const cap = document.createElement('figcaption');
+            cap.textContent = img.caption;
+            fig.appendChild(cap);
+          }
+          gal.appendChild(fig);
+        }
+        msgs.appendChild(gal);
+      }
+
+      // show sources (if any) as a small line under the message
+      if (sources && sources.length) {
+        const s = el('div', 'sources', "Sources: " + sources.map(x => x.source).join(", "));
+        msgs.appendChild(s);
+      }
+
+      row.scrollIntoView({behavior: 'smooth', block: 'end'});
+    }
+
+    // Send the user's question to the API and handle the response.
+    // The request body includes { message, clarify_reply }.
+    async function send() {
+      const input = document.getElementById('q');
+      const text = input.value.trim();
+      if (!text) return;
+      addText('you', text);   // show user's question in UI
+      input.value = '';
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, clarify_reply: clarifyMode })
+      });
+      const data = await res.json();
+      console.log('API response:', data);   // good for debugging on client side
+
+      // If server requests clarification, show it as a bot text and set clarifyMode
+      if (data.clarify) {
+        clarifyMode = true;
+        addText('bot', data.bot);           // follow-up question from bot
+        return;
+      }
+
+      clarifyMode = false;
+      // Normal reply: render text and possible images/sources
+      addInlineAnswer(data.bot || '', data.images || [], data.sources || []);
+    }
+
+    // Wire up UI: button click and Enter key in input
+    document.getElementById('send').addEventListener('click', send);
+    document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  </script>
+</body>
+</html>
