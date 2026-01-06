@@ -80,7 +80,12 @@ def build_segmented_collections() -> Dict[str, Chroma]:
     if os.path.exists(CHROMA_BASE_PATH):
         existing = os.listdir(CHROMA_BASE_PATH)
         if existing:
-            print(f"Loading {len(existing)} existing collections...")
+            print("\n" + "="*60)
+            print("FOUND EXISTING CHROMA COLLECTIONS - LOADING...")
+            print("="*60)
+            print(f"Location: {CHROMA_BASE_PATH}")
+            print(f"Collections found: {len(existing)}")
+
             collections = {}
             for coll_name in existing:
                 coll_path = os.path.join(CHROMA_BASE_PATH, coll_name)
@@ -89,10 +94,19 @@ def build_segmented_collections() -> Dict[str, Chroma]:
                         persist_directory=coll_path,
                         embedding_function=embedding_fn
                     )
-            print(f"Loaded collections: {list(collections.keys())}")
+                    print(f"Loaded: {coll_name}")
+
+            print("="*60)
+            print(f"SUCCESS: {len(collections)} collections loaded from disk")
+            print("Skipping rebuild - using existing collections")
+            print("="*60 + "\n")
             return collections
-    
-    print("Building new segmented collections...")
+
+    print("\n" + "="*60)
+    print("NO EXISTING COLLECTIONS FOUND - BUILDING NEW...")
+    print("="*60)
+    print(f"Will create collections at: {CHROMA_BASE_PATH}")
+    print("="*60 + "\n")
     
     # Group documents by collection
     docs_by_collection = {cat.lower(): [] for cat in DOC_CATEGORIES}

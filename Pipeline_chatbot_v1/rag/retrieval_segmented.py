@@ -7,7 +7,6 @@ from langchain.schema import Document
 
 from rag.router import QueryRouter
 from rag.retrieval import return_top_doc, get_related_image_docs, build_image_notes
-from rag.cache import get_cache_manager  
 from config import MMR_K, MMR_FETCH_K, MMR_LAMBDA
 
 
@@ -131,13 +130,6 @@ class SegmentedRetriever:
         print(f"[RETRIEVE CALLED] query='{query[:60]}...', top_n={top_n}, k={k_per_collection}, routing={use_routing}")
         print(f"{'='*60}")
 
-        # Get cache manager
-        cache_mgr = get_cache_manager()
-        print(f"[DEBUG] Cache manager exists: {cache_mgr is not None}")
-        if cache_mgr:
-            print(f"[DEBUG] Retrieval cache enabled: {cache_mgr.retrieval_cache is not None}")
-            print(f"[DEBUG] Rerank cache enabled: {cache_mgr.rerank_cache is not None}")
-
         # Determine which collections to search
         if use_routing:
             collection_names = self.router.route_with_fallback(
@@ -148,57 +140,21 @@ class SegmentedRetriever:
         else:
             collection_names = list(self.collections.keys())
             print(f"[No Routing] Searching all {len(collection_names)} collections")
-        #Layer 1
-        # STEP 1: Try to get retrieval results from cache
-        docs = None
-        if cache_mgr and cache_mgr.retrieval_cache:
-            collections_tuple = tuple(sorted(collection_names))  # Sort for consistent cache key
-            print(f"[DEBUG] Checking retrieval cache: query='{query[:50]}...', collections={collections_tuple}, k={k_per_collection}")
-            docs = cache_mgr.retrieval_cache.get_retrieval(query, collections_tuple, k_per_collection)
-            if docs is not None:
-                print(f"[Cache HIT] Retrieved {len(docs)} docs from cache (skipped DB search)")
-            else:
-                print(f"[Cache MISS] Retrieval cache - will query DB")
 
-        # STEP 2: If cache miss, retrieve from collections
-        if docs is None:
-            docs = self.retrieve_from_collections(query, collection_names, k_per_collection)
+        # Retrieve from collections
+        docs = self.retrieve_from_collections(query, collection_names, k_per_collection)
 
-            if not docs:
-                print("[Retrieval] No documents found")
-                return [], []
+        if not docs:
+            print("[Retrieval] No documents found")
+            return [], []
 
-            # Deduplicate
-            docs = self.deduplicate_documents(docs)
-            print(f"[Retrieval] {len(docs)} unique documents retrieved from DB")
+        # Deduplicate
+        docs = self.deduplicate_documents(docs)
+        print(f"[Retrieval] {len(docs)} unique documents retrieved from DB")
 
-            # Store in cache for next time
-            if cache_mgr and cache_mgr.retrieval_cache:
-                collections_tuple = tuple(sorted(collection_names))
-                cache_mgr.retrieval_cache.set_retrieval(query, collections_tuple, k_per_collection, docs)
-                print(f"[Cache] Stored retrieval results (query + {len(collection_names)} collections)")
-        #Layer 2
-        # STEP 3: Try to get reranked results from cache
-        cached_rerank = None
-        if cache_mgr and cache_mgr.rerank_cache:
-            print(f"[DEBUG] Checking rerank cache: query='{query[:50]}...', num_docs={len(docs)}, top_n={top_n}")
-            cached_rerank = cache_mgr.rerank_cache.get_reranked(query, docs, top_n)
-            if cached_rerank is not None:
-                top_docs, scores = cached_rerank
-                print(f"[Cache HIT] Retrieved reranked results from cache (skipped cross-encoder)")
-                return top_docs, scores
-            else:
-                print(f"[Cache MISS] Rerank cache - will perform cross-encoding")
-
-        # STEP 4: If cache miss, rerank with cross-encoder
+        # Rerank with cross-encoder
         print(f"[Reranking] Cross-encoding {len(docs)} documents...")
-
         top_docs, scores = return_top_doc(query, docs, top_n=top_n)
-
-        # Store reranked results in cache
-        if cache_mgr and cache_mgr.rerank_cache:
-            cache_mgr.rerank_cache.set_reranked(query, docs, top_n, top_docs, scores)
-            print(f"[Cache] Stored reranked results")
 
         return top_docs, scores
 
@@ -227,8 +183,6 @@ class SegmentedRetriever:
         print(f"[RETRIEVE_WITH_ENTITY CALLED] query='{query[:40]}...', entity='{entity}', top_n={top_n}, k_base={k_base}, k_entity={k_entity}")
         print(f"{'='*60}")
 
-        cache_mgr = get_cache_manager()
-
         # Get base results from routing
         collection_names = self.router.route_with_fallback(
             query,
@@ -236,73 +190,21 @@ class SegmentedRetriever:
         )
         print(f"[Routing] Searching in: {collection_names}")
 
-        # LAYER 1: Try retrieval cache for entity-based retrieval
-        # Cache key includes query, entity, collections, k_base, and k_entity
-        docs = None
-        if cache_mgr and cache_mgr.retrieval_cache:
-            collections_tuple = tuple(sorted(collection_names))
-            # Create unique cache key that includes entity
-            cache_key_query = f"{query}|entity:{entity or 'none'}"
-            print(f"[DEBUG] Checking retrieval cache (with entity): query='{query[:40]}...', entity='{entity}', collections={collections_tuple}")
-            # Use a composite k value for cache key
-            cache_k = f"{k_base}+{k_entity}"
+        # Retrieve with main query
+        docs = self.retrieve_from_collections(query, collection_names, k_base)
 
-            # Try to get from cache using the entity-aware query
-            from rag.cache import hashlib
-            normalized = cache_key_query.lower().strip()
-            sorted_colls = tuple(sorted(collection_names))
-            key_str = f"{normalized}|{sorted_colls}|{cache_k}"
-            cache_key = hashlib.md5(key_str.encode()).hexdigest()
+        # Add entity-specific results if provided
+        if entity:
+            entity_docs = self.retrieve_from_collections(entity, collection_names, k_entity)
+            docs.extend(entity_docs)
 
-            docs = cache_mgr.retrieval_cache.cache.get(cache_key)
-            if docs is not None:
-                # Deep copy like the original get_retrieval does
-                docs = [cache_mgr.retrieval_cache._copy_doc(d) for d in docs]
-                print(f"[Cache HIT] Retrieved {len(docs)} docs from cache (with entity, skipped DB search)")
-                cache_mgr.retrieval_cache.hits += 1
-            else:
-                print(f"[Cache MISS] Retrieval cache (with entity) - will query DB")
-                cache_mgr.retrieval_cache.misses += 1
+        # Deduplicate
+        docs = self.deduplicate_documents(docs)
+        print(f"[Retrieval] {len(docs)} unique documents retrieved from DB (with entity)")
 
-        # If cache miss, retrieve from collections
-        if docs is None:
-            # Retrieve with main query
-            docs = self.retrieve_from_collections(query, collection_names, k_base)
-
-            # Add entity-specific results if provided
-            if entity:
-                entity_docs = self.retrieve_from_collections(entity, collection_names, k_entity)
-                docs.extend(entity_docs)
-
-            # Deduplicate
-            docs = self.deduplicate_documents(docs)
-            print(f"[Retrieval] {len(docs)} unique documents retrieved from DB (with entity)")
-
-            # Store in cache
-            if cache_mgr and cache_mgr.retrieval_cache:
-                cache_mgr.retrieval_cache.cache[cache_key] = [cache_mgr.retrieval_cache._copy_doc(d) for d in docs]
-                print(f"[Cache] Stored retrieval results (with entity: '{entity}')")
-
-        # LAYER 2: Try rerank cache
-        cached_rerank = None
-        if cache_mgr and cache_mgr.rerank_cache:
-            print(f"[DEBUG] Checking rerank cache (with entity): query='{query[:50]}...', num_docs={len(docs)}, top_n={top_n}")
-            cached_rerank = cache_mgr.rerank_cache.get_reranked(query, docs, top_n)
-            if cached_rerank is not None:
-                top_docs, scores = cached_rerank
-                print(f"[Cache HIT] Retrieved reranked results from cache (skipped cross-encoder)")
-                return top_docs, scores
-            else:
-                print(f"[Cache MISS] Rerank cache (with entity) - will perform cross-encoding")
-
-        # If cache miss, do expensive reranking
+        # Rerank with cross-encoder
         print(f"[Reranking] Cross-encoding {len(docs)} documents...")
         top_docs, scores = return_top_doc(query, docs, top_n=top_n)
-
-        # Store reranked results in cache
-        if cache_mgr and cache_mgr.rerank_cache:
-            cache_mgr.rerank_cache.set_reranked(query, docs, top_n, top_docs, scores)
-            print(f"[Cache] Stored reranked results (with entity)")
 
         return top_docs, scores
 

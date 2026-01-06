@@ -9,6 +9,9 @@ FastAPI app serving a retrieval-augmented chatbot:
 Comments added to explain purpose of key functions and flow.
 """
 import os
+# Fix OpenMP duplicate library issue (must be set FIRST before any library imports)
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 import traceback
 from typing import List, Optional, Union, Tuple, Dict
 from fastapi import FastAPI, Request

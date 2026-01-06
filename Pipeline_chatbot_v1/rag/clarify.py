@@ -32,30 +32,35 @@ class Clarifier:
 
         Conditions:
         - Global config can disable clarification entirely.
-        - If there are fewer docs than the configured minimum, ask to clarify.
-        - If no score information is available, ask to clarify.
+        - If there are no docs at all, ask to clarify.
+        - If relevance scores are reasonably good, don't clarify (let the model try to answer).
         - Otherwise, check top score and average score against thresholds.
         """
         # If clarification globally disabled, never ask
         if not ENABLE_CLARIFICATION:
             return False
 
-        # If not enough documents were retrieved, clarification is needed
-        if len(ranked_docs) < CLARIFY_MIN_DOCS:
+        # If absolutely no documents were retrieved, clarification is needed
+        if len(ranked_docs) == 0:
             return True
 
-        # If no relevance scores, be conservative and ask for clarification
+        # If we have at least one document, be more lenient and let the model try
+        if len(ranked_docs) >= CLARIFY_MIN_DOCS:
+            # We have enough docs, don't clarify
+            return False
+
+        # If no relevance scores but we have documents, let the model try to answer
         if not scores:
-            return True
+            return False
 
         # Check whether the top result meets the threshold
         top_ok = scores[0] >= CLARIFY_MIN_SCORE
 
-        # Compute average score and compare to a slightly lower threshold
-        avg_ok = (sum(scores) / max(1, len(scores))) >= (CLARIFY_MIN_SCORE * 0.9)
+        # Compute average score and compare to a lower threshold (0.7x instead of 0.9x)
+        avg_ok = (sum(scores) / max(1, len(scores))) >= (CLARIFY_MIN_SCORE * 0.7)
 
-        # Ask for clarification unless both top and average are acceptable
-        return not (top_ok and avg_ok)
+        # Ask for clarification only if both top and average are poor
+        return not (top_ok or avg_ok)
 
     def make_clarifying_question(self, user_q: str, top_docs: List[Document]) -> str:
         """

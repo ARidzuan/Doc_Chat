@@ -17,7 +17,7 @@ class QueryRouter:
             ],
             "vehicle": [
                 "vehicle", "car", "dynamics", "wheel", "tire", "tyre", "suspension",
-                "brake", "steering", "drivetrain", "engine", "chassis", "callas"
+                "brake", "steering", "drivetrain", "engine", "chassis", "callas", "sensors"
             ],
             "models": [
                 "model", "3d", "asset", "mesh", "object", "import",
@@ -29,7 +29,7 @@ class QueryRouter:
             ],
             "studio": [
                 "studio", "interface", "ui", "gui", "workspace", "editor",
-                "window", "menu", "toolbar", "panel"
+                "window", "menu", "toolbar", "panel","configuration"
             ],
             "analysis": [
                 "analysis", "analyze", "data", "metrics", "report", "results",
@@ -37,7 +37,7 @@ class QueryRouter:
             ],
             "compute": [
                 "compute", "calculation", "algorithm", "process", "module",
-                "plugin", "extension"
+                "plugin", "extension", "cloud", "parallel", "performance"
             ],
             "unreal": [
                 "unreal", "ue4", "ue5", "blueprint", "rendering",

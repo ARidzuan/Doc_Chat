@@ -9,6 +9,9 @@ Usage:
     Set ENABLE_SEGMENTATION=False to use the original single collection approach
 """
 import os
+# Fix OpenMP duplicate library issue (must be set FIRST before any library imports)
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 import traceback
 from typing import List, Optional, Union, Tuple, Dict
 from fastapi import FastAPI, Request
@@ -33,7 +36,6 @@ from rag.prompt import Chatbot_prompt
 from rag.memory import HybridMemory
 from rag.clarify import Clarifier, ClarifyState
 from rag.focus import rewrite_followup_to_standalone
-from rag.cache import init_cache_manager, get_cache_manager
 from tracking.local_tracker import get_tracker
 from tracking.callbacks import UsageTrackingCallback
 
@@ -371,37 +373,6 @@ def pack_images(image_docs, request: Request):
         )
     return out
 
-#Cache middleware and startup helper
-@app.middleware("http")
-async def log_cache_performance(request: Request, call_next):
-    """Log cache hit rates for each request"""
-    cache_mgr = get_cache_manager()
-
-    # Get stats before request
-    if cache_mgr:
-        stats_before = cache_mgr.get_all_stats()
-
-    # Process request
-    response = await call_next(request)
-
-    # Get stats after request
-    if cache_mgr and request.url.path == "/chat":
-        stats_after = cache_mgr.get_all_stats()
-
-        # Print cache performance for this request
-        print("\n" + "="*50)
-        print("CACHE PERFORMANCE (This Request)")
-        print("="*50)
-        for cache_name in stats_after:
-            before = stats_before.get(cache_name, {})
-            after = stats_after[cache_name]
-
-            hits_delta = after["hits"] - before.get("hits", 0)
-            if hits_delta > 0:
-                print(f"{cache_name}: {hits_delta} cache hits")
-        print("="*50 + "\n")
-
-    return response
 
 @app.on_event("startup")
 def startup():
@@ -409,19 +380,7 @@ def startup():
     Initialize based on ENABLE_SEGMENTATION flag.
     """
     global vectordb, retriever, segmented_retriever, collections, memory, clarify_state
-    # NEW: Initialize caching system
-    print("\n" + "="*60)
-    print("INITIALIZING CACHE SYSTEM")
-    print("="*60)
-    cache_mgr = init_cache_manager(
-        embedding_cache_size=500,      # Store 500 query embeddings
-        retrieval_cache_size=300,      # Store 300 retrieval results
-        rerank_cache_size=200,         # Store 200 reranking results
-        enable_embedding_cache=True,   # Enable all caches
-        enable_retrieval_cache=True,
-        enable_rerank_cache=True
-    )
-    print(f"[Cache] Initialization complete!")
+
     if ENABLE_SEGMENTATION:
         print("\n" + "="*60)
         print("STARTING IN SEGMENTED MODE")
@@ -447,42 +406,6 @@ def startup():
     clarify_state = ClarifyState()
     print("="*60 + "\n")
 
-@app.get("/cache/stats")
-def cache_stats():
-    """
-    Get cache performance statistics
-
-    Returns hit rates, sizes, and utilization for all caches
-    """
-    cache_mgr = get_cache_manager()
-
-    if not cache_mgr:
-        return {"error": "Cache not initialized"}
-
-    return {
-        "stats": cache_mgr.get_all_stats(),
-        "performance_note": "High hit rates = good caching effectiveness"
-    }
-
-
-@app.post("/cache/clear")
-def cache_clear():
-    """
-    Clear all caches
-
-    Use this after re-indexing documents or for testing
-    """
-    cache_mgr = get_cache_manager()
-
-    if not cache_mgr:
-        return {"error": "Cache not initialized"}
-
-    cache_mgr.clear_all()
-
-    return {
-        "status": "success",
-        "message": "All caches cleared"
-    }
 
 
 @app.post("/memory/clear")
@@ -512,20 +435,11 @@ def memory_clear():
 @app.post("/clear-all")
 def clear_all():
     """
-    Clear both cache and memory for completely fresh testing
+    Clear memory for completely fresh testing
     """
     global memory
 
-    cache_mgr = get_cache_manager()
-
     results = {}
-
-    # Clear cache
-    if cache_mgr:
-        cache_mgr.clear_all()
-        results["cache"] = "cleared"
-    else:
-        results["cache"] = "not initialized"
 
     # Clear memory
     if memory:

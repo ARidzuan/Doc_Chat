@@ -1,13 +1,19 @@
 
 import os
 
+# Fix OpenMP duplicate library issue (must be set before numpy/scipy/torch imports)
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
+# Get the directory where this config file is located (Pipeline_chatbot_v1)
+_CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Configuration for local server and document storage
 URL = "http://192.168.11.99:8000"   # base URL for any local API or service
 DOC_FOLDER = r"D:\AVSimulation\SCANeRstudio_2025\doc"  # directory containing documents to index
-CHROMA_PATH = "chroma_db_image1"     # local path/name for Chroma DB storage
+CHROMA_PATH = os.path.join(_CONFIG_DIR, "chroma_db_image1")  # local path/name for Chroma DB storage
 
 ENABLE_SEGMENTATION = True  # Set to False to use single collection (legacy mode)
-CHROMA_BASE_PATH = "chroma_db_segmented"  # Base directory for segmented collections
+CHROMA_BASE_PATH = os.path.join(_CONFIG_DIR, "chroma_db_segmented")  # Base directory for segmented collections
 
 # Document categories based on folder structure
 DOC_CATEGORIES = [
@@ -46,7 +52,7 @@ MMR_FETCH_K = 60          # number of items to initially fetch before applying M
 MMR_LAMBDA = 0.9          # trade-off between relevance and diversity (0..1)
 
 # LLM generation settings
-LLM_TEMPERATURE = 0.1     # low temperature for more deterministic/accurate responses
+LLM_TEMPERATURE = 0.3     # balanced temperature for natural yet accurate responses (increased from 0.1)
 
 # Supported document formats
 Text_format = {".txt", ".md", ".docx"}  # plaintext-like formats
@@ -64,8 +70,8 @@ MEMORY_RECALL_TOP_K = 3             # how many memory items to recall for contex
 # Clarification behavior (when system asks follow-up questions)
 ENABLE_CLARIFICATION = True
 CLARIFY_MAX_TURNS = 2   # max number of clarification turns allowed
-CLARIFY_MIN_DOCS = 2    # min number of docs needed to trigger clarification logic
-CLARIFY_MIN_SCORE = 0.35  # minimum relevance score to consider a doc for clarification
+CLARIFY_MIN_DOCS = 1    # min number of docs needed to trigger clarification logic (reduced from 2)
+CLARIFY_MIN_SCORE = 0.25  # minimum relevance score to consider a doc for clarification (reduced from 0.35)
 
 # --- LLM Usage Tracking Settings ---
 # Local tracking (always enabled, unlimited)

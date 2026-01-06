@@ -23,3 +23,6 @@ Upgraded to newer reranker model for sentence-transformer
 
 "cross-encoder/BAAI/bge-reranker-large"
 prev : "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+Mod5
+Added Chainlit Simple implementation
