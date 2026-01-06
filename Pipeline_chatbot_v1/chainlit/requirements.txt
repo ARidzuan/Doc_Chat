@@ -1,0 +1,13 @@
+# Chainlit dependencies
+chainlit>=1.0.0
+
+# Core dependencies (should already be installed from main project)
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-chroma>=0.1.0
+langchain-ollama>=0.1.0
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+
+# Additional utilities
+numpy>=1.24.0
