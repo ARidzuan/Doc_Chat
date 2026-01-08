@@ -34,6 +34,9 @@ from rag.focus import rewrite_followup_to_standalone
 from rag.retrieval import build_image_notes
 from tracking.callbacks import UsageTrackingCallback
 
+# Import chat logger for conversation tracking
+from chat_logger import ChatLogger
+
 from config import (
     LLM_Model,
     LLM_TEMPERATURE,
@@ -54,7 +57,7 @@ topic_embedder = None
 
 @cl.on_chat_start
 async def start():
-    """Initialize chat session (no persistence - fresh session each time)"""
+    """Initialize chat session with JSON logging"""
 
     # Check if system is ready
     if not segmented_retriever:
@@ -63,13 +66,20 @@ async def start():
         ).send()
         return
 
+    # Initialize chat logger for this session
+    logger = ChatLogger()
+    logger.set_metadata("model", LLM_Model)
+    logger.set_metadata("mode", "segmented" if ENABLE_SEGMENTATION else "single")
+    logger.set_metadata("collections", list(collections.keys()) if collections else [])
+
     # Create fresh memory and clarify state for this session
     memory = HybridMemory(embedder=topic_embedder, llm=text_llm)
     clarify_state = ClarifyState()
 
-    # Store in session (no database persistence)
+    # Store in session
     cl.user_session.set("memory", memory)
     cl.user_session.set("clarify_state", clarify_state)
+    cl.user_session.set("chat_logger", logger)
 
     # Welcome message
     mode = "segmented" if ENABLE_SEGMENTATION else "single collection"
@@ -89,9 +99,14 @@ async def main(message: cl.Message):
     """Handle incoming messages"""
     user_query = message.content
 
-    # Get session state (no database - only in-memory)
+    # Get session state
     memory = cl.user_session.get("memory")
     clarify_state = cl.user_session.get("clarify_state")
+    logger = cl.user_session.get("chat_logger")
+
+    # Log user message
+    if logger:
+        logger.log_user_message(user_query)
 
     # Check if this is a clarify reply
     is_clarify_reply = cl.user_session.get("awaiting_clarification", False)
@@ -101,6 +116,10 @@ async def main(message: cl.Message):
         msg = cl.Message(content="")
         await msg.send()
 
+        # Track start time for response latency
+        import time
+        start_time = time.time()
+
         # Process query using api_segmented logic
         result, docs, image_docs = process_query(
             user_query,
@@ -109,11 +128,21 @@ async def main(message: cl.Message):
             is_clarify_reply
         )
 
+        # Calculate response time
+        response_time = time.time() - start_time
+
         # Handle clarification needed
         if result.get("clarify"):
             msg.content = result["clarify_question"]
             await msg.update()
             cl.user_session.set("awaiting_clarification", True)
+
+            # Log clarification
+            if logger:
+                logger.log_assistant_message(
+                    result["clarify_question"],
+                    metadata={"type": "clarification", "response_time_seconds": response_time}
+                )
             return
 
         # Reset clarification flag
@@ -121,6 +150,23 @@ async def main(message: cl.Message):
 
         # Build response
         answer = result.get("answer", "Sorry, I couldn't generate an answer.")
+
+        # Extract sources for logging
+        sources = []
+        if docs:
+            sources = list(set([doc.metadata.get("source", "unknown") for doc in docs]))
+
+        # Log assistant response
+        if logger:
+            logger.log_assistant_message(
+                answer,
+                sources=sources,
+                metadata={
+                    "response_time_seconds": response_time,
+                    "num_sources": len(sources),
+                    "num_images": len(image_docs) if image_docs else 0
+                }
+            )
 
         # Update message with answer
         msg.content = answer
@@ -134,6 +180,11 @@ async def main(message: cl.Message):
     except Exception as e:
         traceback.print_exc()
         error_msg = f"An error occurred: {str(e)}"
+
+        # Log error
+        if logger:
+            logger.log_error(str(e), context={"query": user_query})
+
         await cl.Message(content=error_msg).send()
 
 
@@ -294,8 +345,12 @@ def image_absolute_path(d) -> str:
 
 @cl.on_chat_end
 async def end():
-    """Handle chat session end (no persistence needed)"""
-    print("Chat session ended")
+    """Handle chat session end and finalize logging"""
+    logger = cl.user_session.get("chat_logger")
+    if logger:
+        logger.end_session()
+        summary = logger.get_session_summary()
+        print(f"Chat session ended. Logged {summary['message_count']} messages to {summary['file']}")
 
 
 # Initialize system at startup (before any requests)
