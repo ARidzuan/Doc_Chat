@@ -26,3 +26,18 @@ prev : "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 Mod5
 Added Chainlit Simple implementation
+
+Mod6
+Added Chainlit implementation with PERSISTENCE [FIXED - Jan 7, 2026]
+- Multi-user support with authentication
+- Chat history persistence using SQLAlchemy
+- Resume previous conversations
+- Create new chats without deleting old history
+- Backend REST API for chat management
+- Export and search functionality
+- Scalable architecture (SQLite → PostgreSQL)
+
+
+Mod 7
+Added User Sign up for simple password managing
+

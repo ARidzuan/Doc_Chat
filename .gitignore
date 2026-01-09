@@ -18,3 +18,14 @@ Pipeline_chatbot_v1/chroma_html_db/
 Pipeline_chatbot_v1/chroma_db_1/
 
 Pipeline_chatbot_v1/chainlit/Instruct.md
+
+Pipeline_chatbot_v1/chainlit/data
+
+Pipeline_chatbot_v1/chainlit-cookbook
+
+Pipeline_chatbot_v1/chainlit_old_rebase
+Pipeline_chatbot_v1/chainlit_rebase_gpt
+Pipeline_chatbot_v1/chainlit_rebase_claude
+Pipeline_chatbot_v1/chainlit_working_dir
+
+CHAT_HISTORY_SUMMARY.md

@@ -1,5 +1,9 @@
 # persistence.py
 import sqlite3
+import os
+
+# Ensure data directory exists
+os.makedirs("data", exist_ok=True)
 
 conn = sqlite3.connect("data/chat.db", check_same_thread=False)
 

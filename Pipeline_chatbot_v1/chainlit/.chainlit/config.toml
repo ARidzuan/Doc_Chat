@@ -61,6 +61,8 @@ auto_tag_thread = true
 # Name of the assistant.
 name = "RAG Assistant"
 
+login_page_image = "/public/C8.PNG"
+
 # Description of the assistant. This is used for HTML tags.
 description = "A document-based RAG chatbot powered by LangChain and Ollama"
 
@@ -82,7 +84,7 @@ hide_cot = false
 
 # Specify a Javascript file that can be used to customize the user interface.
 # The Javascript file can be served from the public directory.
-custom_js = "/public/thread_persistence.js"
+custom_js = "/public/auth_signup.js"
 
 # Specify a custom font url.
 # custom_font = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"

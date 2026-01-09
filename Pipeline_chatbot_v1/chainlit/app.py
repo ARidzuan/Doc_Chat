@@ -433,6 +433,56 @@ def initialize_system():
 initialize_system()
 
 
+# API endpoint for sign-up (using Chainlit's on_settings_update hook)
+# We'll use Chainlit's action callback instead since cl.app is not directly accessible
+
+@cl.action_callback("create_account_action")
+async def create_account_action(action: cl.Action):
+    """Handle account creation via action callback"""
+    # This is a placeholder - we'll handle signup via the standalone API
+    pass
+
+# Alternative: Use Chainlit's server lifecycle hooks to add custom routes
+def register_signup_endpoint():
+    """Register the signup API endpoint after Chainlit initializes"""
+    try:
+        # Import Chainlit's internal server
+        from chainlit.server import app as chainlit_app
+        from fastapi import Request
+        from fastapi.responses import JSONResponse
+
+        @chainlit_app.post("/signup-api")
+        async def signup_api(request: Request):
+            """API endpoint for user sign-up"""
+            try:
+                data = await request.json()
+                username = data.get("username", "").strip()
+                password = data.get("password", "")
+
+                # Import the signup function
+                from auth import add_user_to_env
+
+                success, message = add_user_to_env(username, password)
+
+                return JSONResponse({
+                    "success": success,
+                    "message": message
+                })
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "message": f"Server error: {str(e)}"
+                }, status_code=500)
+
+        print("✅ Sign-up API endpoint registered at /signup-api")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not register sign-up API endpoint: {e}")
+        print("   The standalone signup tools (signup.py, signup_cli.py) will still work.")
+
+# Register the endpoint
+register_signup_endpoint()
+
+
 if __name__ == "__main__":
     # This is used for chainlit run command
     pass
