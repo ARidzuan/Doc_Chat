@@ -10,6 +10,11 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 import sys
 import traceback
 from typing import List
+import auth
+
+from persistence import save_message, load_messages
+
+
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -81,6 +86,31 @@ async def start():
     cl.user_session.set("clarify_state", clarify_state)
     cl.user_session.set("chat_logger", logger)
 
+    user = cl.user_session.get("user")
+    if not user:
+        await cl.Message(content="Authentication error.").send()
+        return
+
+    user_id = user.identifier
+    history = load_messages(user_id)
+
+    last_user = None
+
+    for role, content in history:
+        if role == "user":
+            # Render as user bubble
+            await cl.Message(content=content).send()
+            last_user = content
+
+        elif role == "assistant":
+            # Render as assistant bubble
+            await cl.Message(author="Assistant", content=content).send()
+
+            # Rehydrate memory only when we have a full pair
+            if last_user:
+                memory.append(last_user, content)
+                last_user = None
+
     # Welcome message
     mode = "segmented" if ENABLE_SEGMENTATION else "single collection"
     welcome_msg = f"""Welcome to the RAG Chatbot!
@@ -97,8 +127,11 @@ Ask me anything about your documents!
 @cl.on_message
 async def main(message: cl.Message):
     """Handle incoming messages"""
-    user_query = message.content
 
+    user = cl.user_session.get("user")
+    user_id = user.identifier if user else "anonymous"
+    user_query = message.content
+    save_message(user_id, "user", user_query)
     # Get session state
     memory = cl.user_session.get("memory")
     clarify_state = cl.user_session.get("clarify_state")
@@ -150,7 +183,7 @@ async def main(message: cl.Message):
 
         # Build response
         answer = result.get("answer", "Sorry, I couldn't generate an answer.")
-
+        save_message(user_id, "assistant", answer)
         # Extract sources for logging
         sources = []
         if docs:
